@@ -1,0 +1,47 @@
+General Idea of scraper:
+
+execute once on all available historic data to have a set for validation
+
+execute each night at 4 AM CET to make sure no new articles are released during run
+
+scraper:
+
+  for each website
+    get links to press releases either from RSS or news-subsite
+      safe link, date, headline in file "YYYY_MM_DD_links"
+      safe error messages in a seperate file "YYYY_MM_DD_links_errors"
+      discard dublicate entries or entries that are already >=3 x in data base
+    open each individual of these website
+      safe complete website as string in one file "YYYY_MM_DD_websites"
+      safe error messages in a seperate file "YYYY_MM_DD_websites_errors"
+    open each website-string
+      safe headline, date, text body, in one file "YYYY_MM_DD_data"
+      safe error messages in a seperate file "YYYY_MM_DD_data_errors"
+    for each entry in the "YYYY_MM_DD_data" file
+      check whether keyword e.g. "streik", "warnstreik" is in headline or text body
+      extract all city names and match geo locations
+      extract all company names
+      extract all numbers
+      extract all temporal information (e.g. "X hours", "X days")
+    send e-mail with the following information
+      new articles: X
+      new articles that seem to be about a strike: X
+      number of errors in scraper_links: X
+      number of errors in scraper_websites: X
+      elapsed time scraper_links: X
+      elapsed time scraper_websites: X
+      share of external links: X
+    update strike count on website with geo locations
+
+Back of the envelope calculation for storage space:
+  50,000 historic press releases (depth 50 sites historic) require 12 MB => 0.24 KB / press release
+  one full website requires 100 KB
+    5 GB for 50,000 historic press releases at depth 50 sites -> feasible, even depth 100
+    given ca 400 articles / month, assume 100 articles / day, 10 MB for daily scrape
+      ca 4 GB / year -> feasible
+
+
+
+
+
+
