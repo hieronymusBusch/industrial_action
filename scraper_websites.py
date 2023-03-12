@@ -15,13 +15,16 @@
 
 # second step: using links provided by scraper_links to scrape press releases from websites 
 
+# adds the following variables: 
+#   - site_headline, site_shorttext, site_fulltext, site_date, 
+
 # to do: 
 # - safe one copy of current daily data & a merged version
 # - implement "vintage" URLS and IGM-NRW into feed
 # - automate on server 
 # - run and safe historic version 
 # - integrate url2 option / igm nrw in rss scraping 
-# - integrate dates of url2 & urlby articles (no date on site)
+# - integrate dates of urlby articles (no date on site)
 
 import numpy as np
 import random
@@ -42,74 +45,67 @@ import csv
 
 # setup 
 #pd.set_option('display.max_rows', 300)
+sys.setrecursionlimit(9999999)
+
+# timer for script
+time_start = time.time()
 
 
-# open link-data 
+## open link-data 
+
+# current day data 
 links_pickle = datetime.now().strftime("%Y_%m_%d") + "_links"
 links_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/{links_pickle}.pickle"
 with open(links_pickle, "rb") as file:  
   data_sites = pickle.load(file)
-with open(hist_pickle, "rb") as file: 
-  data_sites_hist = pickle.load(file)
+#memo_pickle = datetime.now().strftime("%Y_%m_%d") + "_memo"
+#memo_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/{memo_pickle}.pickle"
+#with open(memo_pickle, "rb") as file:  
+#  memo = pickle.load(file)
+# open all data
+all_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/all_pickle.pickle"
+with open(all_pickle, "rb") as file:  
+  df_all = pickle.load(file)
 
 
-## prepare data frame for analysing links 
+## prepare links to be analysed 
 
 # convert entries to data frame
-df_names = ["date","union","union_section","news_title","news_url","news_date",
-            "union_url","union_url_type"]
-length_list = len(data_sites)-1
-df = pd.DataFrame(data_sites[0:length_list+1], columns=df_names)
-# reduce urls to "stubs" and build links that are only partial in RSS 
-# -> integrated in code, not run yet 
-#df["union_url"] = df["union_url"].str.extract(r"^(https?://[\w\.-]+)(?:/|$)", expand=False).fillna('')
-#union_urls = ["https://www.igmetall-hannover.de", 
-#              "https://www.igmetall-ostbrandenburg.de", 
-#              "https://www.igmetall-ostsachsen.de", 
-#              "https://www.igmetall-sued-niedersachsen-harz.de"]
-#df.loc[df["union_url"].isin(union_urls), "news_url"] = df["union_url"] + df["news_url"]
+df_names = [["union","union_section","union_url","union_url_type","link_headline",
+             "link_url","link_date","link_url_type","scrape_date","scrape_page",
+             "link_date_std","local"]]
+length_list = len(links)-1
+df = pd.DataFrame(links[0:length_list+1], columns=df_names)
 
-# load large df with all press releases
 # create empty df
 df_all = pd.DataFrame(columns=["news_id","scrape_version","scrape_date","news_date",
                                "news_headline","news_shorttext","news_fulltext",
                                "news_url","union","union_section","union_url"])
-# load df_all
+
+# case 1: no previous data, set id to 0 and set previous data counter to 3
+c_news_id = 0
+
+# case 2: load all data, set id to max id of historic dat a
 #all_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/df_all.pickle"
 #with open(all_pickle, "rb") as file: # data frame of all combined days
 #  df_all = pickle.load(file)
-# simulate old data which already contains some entries
+#c_news_id = max(df_all["news_id"]) # counter news_id starting from max. prev. ID
+
+# case 3: test run, simulate some historic data based on data in memory 
 #df1 = df.sample(n=300, random_state=1)
 #df2 = df1.sample(n=100, random_state=1)
 #df_all = pd.concat([df1, df2], ignore_index=True)
 #df_all["news_id"] = range(1, len(df_all) + 1) # simulate identifier
 #c_news_id = max(df_all["news_id"]) # counter news_id starting from max. prev. ID
-c_news_id = 0
-# -> need to change this to "load df of press releases" once this goes live 
 
-# dealing with double entries across sites 
-print(df["news_url"].nunique())      # number of unique links in df < total n of entries
-# -> sometimes, local units "repost" press releases of neighbors, sometimes it is regional IGM 
-# identifier whether link is "local"
-df["local_link"] = df["union_url"].eq(df["news_url"].str.extract(r"^(https?://[\w\.-]+)", expand=False))
-# drop duplicates from the same website (e.g. by IGM press & IGM news)
-df.drop_duplicates(subset=["news_url"], keep="first", inplace=True, ignore_index=True)
-# identifier whether link is dublicate 
-df["is_duplicate"] = df.duplicated(subset=["news_url"], keep=False)
-# if still duplicates, delete version that was cross-posted 
-df.drop(df[(df["is_duplicate"] == True) & (df["local_link"] == False)].index, inplace=True)
-# -> what to do with cross-posts that are not in data base? 
-# -> currently, we ignore them, o/w we'd need to upate the union_url_type identifier accordingly
-#    and deal with some unions cross posting non-unions sites 
-# -> maybe just safe but do not scrape content? 
-df.drop(df[(df["local_link"] == False)].index, inplace=True)
-# re-convert back to list 
-press_list = df.values.tolist()
-
-# test-list with only one entry per trade union unit 
+# collapse data in memory to one entry per unit for testing
 #df_test = df.drop_duplicates(subset=["union_section"])
 #df_test.drop(df_test.loc[df_test["union_section"] == "IGM-Ost"].index, inplace=True)
 #press_list = df_test.values.tolist()
+
+# convert to data frame 
+press_list = df_test.values.tolist()
+
 
 ## analysing content of press releases 
 time_3 = time.time()

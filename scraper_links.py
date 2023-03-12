@@ -12,12 +12,9 @@
 ################################################################################
 
 # to do: 
-# - safe one copy of current daily data & a merged version with historic data
-# - add a running number for the day? 
-# - integrate "vintage"/individual URLS and IGM-NRW: currently 22 websites not scraped! 
-# - integrate DATES of url2 and igm main website 
+# - integrate "vintage"/individual URLS: currently 22 websites not scraped! 
 # - automate on server 
-# - add automated e-mail if there is an error message
+# - this now only scrapes rss - implement non-rss scraper for type NRW and url2 and some ind.
 
 import numpy as np
 import random

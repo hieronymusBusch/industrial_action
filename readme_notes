@@ -17,6 +17,7 @@ scraper:
     open each website-string
       safe headline, date, text body, in one file "YYYY_MM_DD_data"
       safe error messages in a seperate file "YYYY_MM_DD_data_errors"
+    combine all error files in one "YYYY_MM_DD_errors" file
     for each entry in the "YYYY_MM_DD_data" file
       check whether keyword e.g. "streik", "warnstreik" is in headline or text body
       extract all city names and match geo locations
@@ -31,16 +32,24 @@ scraper:
       elapsed time scraper_links: X
       elapsed time scraper_websites: X
       share of external links: X
+        -> safe all of this information in a meta-file "YYYY_MM_DD_meta"
     update strike count on website with geo locations
+  -> files created
+    1. YYYY_MM_DD_links
+    2. YYYY_MM_DD_websites
+    3. YYYY_MM_DD_data
+    4. YYYY_MM_DD_errors
+    5. YYYY_MM_DD_meta
 
 Back of the envelope calculation for storage space:
-  50,000 historic press releases (depth 50 sites historic) require 12 MB => 0.24 KB / press release
+  50,000 historic press releases (depth 200 sites historic) require 8 MB
   one full website requires 100 KB
-    5 GB for 50,000 historic press releases at depth 50 sites -> feasible, even depth 100
-    given ca 400 articles / month, assume 100 articles / day, 10 MB for daily scrape
-      ca 4 GB / year -> feasible
+    5 GB for 50,000 historic press releases at depth 200 sites -> feasible
+    given ca 400 articles / month, assume 30 articles / day, 3 MB for daily scrape
+      ca 1 GB / year -> feasible
 
-
+current run time
+  historic press releases 200 depth 2023-03-11: 48726 entries, 266 min
 
 
 

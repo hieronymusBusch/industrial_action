@@ -29,18 +29,23 @@
 #       (most likely the same as the type of url of the "mothersite"), and the scraping time / date
 
 # to do: 
-# - integrate "vintage"/individual URLS and IGM-NRW: currently 22 websites not scraped! 
-# - integrate DATES of url2 and igm main website
-# - run and safe historic version 
+# - integrate "vintage"/individual URLS: currently 21/ websites not scraped! 
 
 # setup 
 import re
+import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
+from pytz import timezone
 import sys
 import time
 from dateutil.parser import parse
+import pickle
+
+#import numpy as np
+#import random
+
 #pd.set_option('display.max_rows', 300)
 sys.setrecursionlimit(9999999)
 
@@ -56,6 +61,8 @@ time_start = time.time()
 
 # union information (links etc.)
 union_data_hist = pd.read_excel("union_data.xlsx", sheet_name="hist", index_col=0)
+union_data_hist["U-URL-Type"].value_counts()
+
 # create url_stubs 
 def extract_url_stub(url):
     url_stub = re.findall(r"^(https?:\/\/[a-z-_.]+\.de)\/", url)
@@ -63,14 +70,14 @@ def extract_url_stub(url):
 union_data_hist['union_url_stub'] = union_data_hist['U-URL'].apply(extract_url_stub)
 # define empty lists for loop 
 hist_links = [["union","union_section","union_url","union_url_type","link_headline",
-               "link_url","link_date","link_url_type","scrape_date"]]
+               "link_url","link_date","link_url_type","scrape_date","scrape_page"]]
 hist_links_errors = []
 
 
 ## looping over websites 
 for row in union_data_hist.index: 
   # continue loop if url not encoded in scraper right now
-  if union_data_hist["U-URL-Type"][row] in ["url1", "urlby", "urlby1", "urlbw", "url2", "url11"]: 
+  if union_data_hist["U-URL-Type"][row] in ["url2", "url1", "urlby", "urlby1", "urlbw", "url11"]:  
     # reset values
     empty_values = ["link_title","link_url","link_date","link_url_type","scrape_date",
                     "url_new","page","soup","results","error","press_releases","date_element"]
@@ -80,7 +87,7 @@ for row in union_data_hist.index:
     germany = timezone("Europe/Berlin")
     scrape_date = str(datetime.now(germany))
     # loop for sub-sites of the news website (page 1, page 2, ...)
-    for x in range(1,2): # this is range[beginning,end) !!!
+    for x in range(1,201): # at 200, only Bruchsal has unscraped pages and those are from before 2005
       if x==1: # create URL, first site oftentimes not called "seite/1/"
         url_new = union_data_hist["U-URL"][row]
       if x>1 and union_data_hist["U-URL-Type"][row] in ["url1", "url11", "url2"]: # url1 structure 
@@ -88,11 +95,16 @@ for row in union_data_hist.index:
           url_new = union_data_hist["U-URL"][row] + "page/" + str(x) + "/"
         elif union_data_hist["U-Unit"][row]=="Dresden-Riesa": # exception for one unit 
           url_new = union_data_hist["U-URL"][row] + "seite-" + str(x)
+        elif union_data_hist["U-Unit"][row]=="IGM-Aktuelles": # exception for one unit 
+          url_new = union_data_hist["U-URL"][row] + "?swt_sms=nif&q=&p=" + str(x) + "&s=10&es=1&t=&pp=&c=&from=&to=#results"
         #elif union_data_hist["U-Unit"][row]=="Ludwigsburg-Waiblingen": # exception for one unit 
           #url_new = union_data_hist["U-URL"][row] + "node?page=" + str(x-1)
           #print("waiblingen test")
-        elif union_data_hist["U-URL-Type"][row]=="url2" and next_link: # url2 structure, only if next_link exists (ie not past final page) 
-          url_new = union_data_hist["union_url_stub"][row] + "/" + next_link[0]
+        elif union_data_hist["U-URL-Type"][row]=="url2": # url2 structure, only if next_link exists (ie not past final page) 
+          if next_link: 
+            url_new = next_link
+          else: 
+            break
         else:  
           url_new = union_data_hist["U-URL"][row] + "seite/" + str(x) + "/"
       if x>1 and union_data_hist["U-URL-Type"][row]=="urlbw": # urlbw structure 
@@ -118,14 +130,25 @@ for row in union_data_hist.index:
           break 
       if not results: 
         results = soup.find("div", class_="news-list-view")
+      if not results: 
+        results = soup.find("div", class_="mainContent")
       # for url2-type: find link for next site (for url2, the urls are not trivial!)
       if union_data_hist["U-URL-Type"][row]=="url2": 
         next_link = results.find("li", class_="last next")
-        next_link = re.findall(r'<a href="/([^"]*)"', str(next_link))
+        if next_link: 
+          next_link = re.findall(r'<a href="/([^"]*)"', str(next_link))
+        if not next_link: # igm nrw 
+          next_link = re.findall(r'<a href="/([^"]*)">nächste</a>', str(results))
+        if next_link: 
+          next_link = next_link[0]
+          next_link = union_data_hist["union_url_stub"][row] + "/" + re.sub("amp;", "", next_link)
+        print(next_link)
       # finds all articles on the front page 
       press_releases = results.find_all("a", class_="spanAllLink") # url11 / 1
       if not press_releases: 
         press_releases = results.select("div.news-list-content > div.news-list-content") # url11 / 1: nienburg (has nested objects with the same name)
+      if not press_releases: 
+        press_releases = results.find_all("div", class_="col-sm-12 col-12") # IGM main site
       if not press_releases: 
         press_releases = results.find_all("div", class_="news-list-content") # url11 / 1
       if not press_releases: 
@@ -146,24 +169,26 @@ for row in union_data_hist.index:
               link_url = link[0]
             else: 
               link_url = union_data_hist["union_url_stub"][row] + link[0] 
-            print(link_url)
+            #print(link_url)
           # headline
           link_title = press_release.find("h2") # e.g. url2
           if not link_title: 
             link_title = press_release.find("h1")
           if not link_title: 
-            link_title = press_release.find("h4", class_="newsheadline") 
+            link_title = press_release.find("h4") # , class_="newsheadline" 
           if link_title: 
             link_title = link_title.text.strip()
-            print(link_title)
+            #print(link_title)
           # date 
           date_element = press_release.find("li") # most url1 websites
           if not date_element: 
-            link_date = re.findall(r'class="teaser-date">([^<]*)</p>', str(press_release)) # case for IGM main
+            link_date = re.findall(r'class="updated">([^<]*)<', str(press_release)) # url2, gelsenkirchen
             if not link_date: 
-              link_date = re.findall(r'class="updated">([^<]*)"</span>', str(press_release)) # url2, gelsenkirchen
+              link_date = re.findall(r'db kick" data-date=" | ([^<]*)" data-date-short', str(press_release)) # case for IGM main
             if not link_date:
               link_date = re.findall(r'class="news-list-date">([^<]*)</span>', str(press_release)) # url2
+            if not link_date:
+              link_date = re.findall(r'class="teaser-date">([^<]*)</p>', str(press_release)) # some urlby
             if link_date: 
               link_date = link_date[0]
           if not (date_element or link_date): 
@@ -186,9 +211,9 @@ for row in union_data_hist.index:
           # save data 
           hist_link = [union_data_hist["U-Union"][row], union_data_hist["U-Unit"][row], 
                             union_data_hist["U-URL"][row], union_data_hist["U-URL-Type"][row], 
-                            link_title, link_url, link_date, link_url_type, scrape_date]
+                            link_title, link_url, link_date, link_url_type, scrape_date, x]
           hist_links.append(hist_link) # scraped results
-          print("added to hist_links")
+          #print("added to hist_links")
   if row+1==len(union_data_hist): 
     print("successful run")
         
@@ -198,7 +223,8 @@ for row in union_data_hist.index:
 length_list = len(hist_links)-1
 df = pd.DataFrame(hist_links[1:length_list+1], columns=hist_links[0])
 
-# convert to uniform data format DD.MM.YYYY
+
+## convert to uniform data format DD.MM.YYYY
 def extract_date(text):
     # Check for format "dd.mm.yyyy"
     match = re.search(r'(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})', text)
@@ -210,9 +236,35 @@ def extract_date(text):
         if len(month) == 1:
             month = '0' + month
         year = match.group(3)
-        return datetime.date(int(year), int(month), int(day)).strftime('%d.%m.%Y')
+        return datetime(int(year), int(month), int(day)).strftime('%d.%m.%Y')
+    # Check for format "dd/mm/yyyy"
+    match = re.search(r'(\d{1,2})\/\s*(\d{1,2})\/\s*(\d{4})', text)
+    if match:
+        day = match.group(1)
+        if len(day) == 1:
+            day = '0' + day
+        month = match.group(2)
+        if len(month) == 1:
+            month = '0' + month
+        year = match.group(3)
+        return datetime(int(year), int(month), int(day)).strftime('%d.%m.%Y')
     # Check for format "d. Month yyyy"
-    match = re.search(r'(\d{1,2})\.\s*([^\d\s]+)\s*(\d{4})', text)
+    #match = re.search(r'(\d{1,2})\.\s*([^\d\s]+)\s*(\d{4})', text)
+    month_dict = {
+        'Januar': 1,
+        'Februar': 2,
+        'März': 3,
+        'April': 4,
+        'Mai': 5,
+        'Juni': 6,
+        'Juli': 7,
+        'August': 8,
+        'September': 9,
+        'Oktober': 10,
+        'November': 11,
+        'Dezember': 12
+    }
+    match = re.search(r'(\d{1,2})\.\s*([a-zA-ZäöüßÄÖÜ]+)\s*(\d{4})', text)
     if match:
         day = match.group(1)
         if len(day) == 1:
@@ -221,12 +273,12 @@ def extract_date(text):
         year = match.group(3)
         # Convert month name to month number
         try:
-            month_num = datetime.datetime.strptime(month, '%B').month
-            return datetime.date(int(year), month_num, int(day)).strftime('%d.%m.%Y')
-        except ValueError:
+            month_num = month_dict[month]
+            return datetime(int(year), month_num, int(day)).strftime('%d.%m.%Y')
+        except KeyError:
             pass
     return ''
-df['link_date'] = df['link_date'].apply(extract_date)
+df['link_date_std'] = df['link_date'].apply(extract_date)
 
 
 ## Drop duplicate links, keep instance from own website if possible 
@@ -243,22 +295,25 @@ df.drop_duplicates(subset=['link_url'], keep='first', inplace=True)
 duplicate_counts = df.groupby('link_url').size()
 df['duplicate_count'] = df['link_url'].map(duplicate_counts)
 df.drop('duplicate_count', axis=1, inplace=True)
-# convert back to list 
-hist_links = df.values.tolist()
+
+
+## convert back to list 
+hist_links_clean = df.values.tolist()
+df.sort_values(by=['union_section'], inplace=True)
 
 
 ## safe data
+# as "historic" separate file
 hist_links_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/hist_links_pickle.pickle"
 with open(hist_links_pickle, "wb") as file:
-  pickle.dump(hist_links, file)
+  pickle.dump(hist_links_clean, file)
 hist_links_errors_pickle = f"C:/Users/AlexBusch/Dropbox/Industrial_Action/data/web_scraper/hist_links_errors.pickle"
 with open(hist_links_errors_pickle, "wb") as file:
   pickle.dump(hist_links_errors, file)
 
+
+## measure elapsed time in minutes 
 time_end = time.time()
 elapsed_time = (time_end - time_start)/60 # elapsed time in minutes 
 print(elapsed_time)
-
-
-
 
